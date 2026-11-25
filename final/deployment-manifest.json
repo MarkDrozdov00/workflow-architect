@@ -31,7 +31,7 @@
       "files": {
         "agent.json": "86c0f3e1b3e51959c4d81739b3fb79d26d000c03ea6cd8af8330cd133537fba9",
         "description.md": "7816537b337a112eb7582b9fa1e1321362fc426c4fdb80773e0e2ffd568a211d",
-        "instructions.md": "a824d6c5f0ebe3325d174d5dd3ee9519c0a6dd2ad158585a6ab93194655cc064",
+        "instructions.md": "06d46bc66ace5d606642a950b549b0f1ff2140be7a38bfb96cfbf1b3bfa01fb4",
         "workflow.schema.json": "9ce37e89a6c325e1ab7d32997d3d27e1a4cee49fdc63f55ff09103b94e69fb30",
         "workflow_ppt_builder.py": "4d97dc2648b75a316e086060f3fc4c3f6a5bad1edec56e733f0dfa4192b4b22b"
       }
