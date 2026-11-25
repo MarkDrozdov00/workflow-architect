@@ -12,7 +12,7 @@
       "files": {
         "agent.json": "34f6d2ea1f8ba807f2cdf0eff8ee2630326097b7a64432cd02670b6070d1e27c",
         "description.md": "89006aba584d68d82174473c754fb9cf4fec6b6a5a89671032c6812848050d84",
-        "instructions.md": "4500ead576db7fccf766a2aced3beeb08b0221c2adb02a9629ab9c11e94bf403",
+        "instructions.md": "d7567cfc18415ae391245fb983631c05c20ed90cb3a91eb6b536eadab0e055ea",
         "workflow.schema.json": "9ce37e89a6c325e1ab7d32997d3d27e1a4cee49fdc63f55ff09103b94e69fb30"
       }
     },
@@ -31,7 +31,7 @@
       "files": {
         "agent.json": "86c0f3e1b3e51959c4d81739b3fb79d26d000c03ea6cd8af8330cd133537fba9",
         "description.md": "7816537b337a112eb7582b9fa1e1321362fc426c4fdb80773e0e2ffd568a211d",
-        "instructions.md": "06d46bc66ace5d606642a950b549b0f1ff2140be7a38bfb96cfbf1b3bfa01fb4",
+        "instructions.md": "fb1c889346f1f1f3a21d04e5c8c8b13680a1a7ced458127bb19c76e165a5d841",
         "workflow.schema.json": "9ce37e89a6c325e1ab7d32997d3d27e1a4cee49fdc63f55ff09103b94e69fb30",
         "workflow_ppt_builder.py": "4d97dc2648b75a316e086060f3fc4c3f6a5bad1edec56e733f0dfa4192b4b22b"
       }
