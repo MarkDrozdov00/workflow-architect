@@ -11,3 +11,5 @@ Approved customers must accept the contractual terms before the card is issued. 
 Include business rejection, missing information, technical failures, retries, pending applications and duplicate prevention. Keep unconfirmed bank-specific policies as assumptions or open questions.
 
 Please create a detailed business workflow rather than a full technical specification.
+
+Please design a simple employee leave request workflow. The employee submits a request, the manager approves it, rejects it or requests corrections. If corrections are required, the employee updates and resubmits the request. The employee receives a notification of the final decision. Create a professional, editable PowerPoint on one slide. The requirements are complete, so no further clarification is needed.
