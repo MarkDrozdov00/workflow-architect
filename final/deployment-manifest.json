@@ -1,0 +1,50 @@
+{
+  "manifest_version": "1.0",
+  "generated_for": "ChatPwC deployment readiness",
+  "agents": {
+    "workflow-designer": {
+      "entrypoint": "instructions.md",
+      "configuration": "agent.json",
+      "description": "description.md",
+      "schema": "workflow.schema.json",
+      "runtime": "ChatPwC conversational agent with the schema supplied as an approved reference",
+      "third_party_dependencies": [],
+      "files": {
+        "agent.json": "34f6d2ea1f8ba807f2cdf0eff8ee2630326097b7a64432cd02670b6070d1e27c",
+        "description.md": "89006aba584d68d82174473c754fb9cf4fec6b6a5a89671032c6812848050d84",
+        "instructions.md": "28336da0ef00d8a66364d8ce6d209066f93d441a53861d46510f3d681d7fbb84",
+        "workflow.schema.json": "9ce37e89a6c325e1ab7d32997d3d27e1a4cee49fdc63f55ff09103b94e69fb30"
+      }
+    },
+    "ppt-designer": {
+      "entrypoint": "instructions.md",
+      "configuration": "agent.json",
+      "description": "description.md",
+      "schema": "workflow.schema.json",
+      "script_entrypoint": "workflow_ppt_builder.generate_workflow",
+      "runtime_paths": ["/mnt/data"],
+      "python": ">=3.11",
+      "third_party_dependencies": ["python-pptx>=1.0.0"],
+      "locally_verified_with": {
+        "python-pptx": "1.0.2"
+      },
+      "files": {
+        "agent.json": "86c0f3e1b3e51959c4d81739b3fb79d26d000c03ea6cd8af8330cd133537fba9",
+        "description.md": "7816537b337a112eb7582b9fa1e1321362fc426c4fdb80773e0e2ffd568a211d",
+        "instructions.md": "a824d6c5f0ebe3325d174d5dd3ee9519c0a6dd2ad158585a6ab93194655cc064",
+        "workflow.schema.json": "9ce37e89a6c325e1ab7d32997d3d27e1a4cee49fdc63f55ff09103b94e69fb30",
+        "workflow_ppt_builder.py": "4d97dc2648b75a316e086060f3fc4c3f6a5bad1edec56e733f0dfa4192b4b22b"
+      }
+    }
+  },
+  "shared_contract": {
+    "schema_sha256": "9ce37e89a6c325e1ab7d32997d3d27e1a4cee49fdc63f55ff09103b94e69fb30",
+    "handoff": "The Workflow Designer JSON object is passed unchanged to Workflow PPT Designer validation and rendering. Presentation options are separate."
+  },
+  "local_simulation_differences": [
+    "Codex CLI supplies conversation history and a documented technical wrapper around the exact deployment instructions.",
+    "The development bridge interprets controlled presentation_action JSON and invokes the final builder.",
+    "Preview generation uses macOS qlmanage when available; it is not required for PPTX generation.",
+    "ChatPwC model/tool availability and Run Code sandbox behavior must be confirmed in the target tenant."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "ppt-designer",
+  "display_name": "Workflow PPT Designer",
+  "capabilities": [
+    "conversation",
+    "workflow_json",
+    "workflow_validation",
+    "render_pptx",
+    "presentation_refinement"
+  ],
+  "references": [
+    "workflow.schema.json"
+  ],
+  "scripts": {
+    "renderer": "workflow_ppt_builder.py"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "workflow-designer",
+  "display_name": "Workflow Designer",
+  "capabilities": [
+    "conversation",
+    "workflow_json",
+    "workflow_validation"
+  ],
+  "references": [
+    "workflow.schema.json"
+  ]
+}

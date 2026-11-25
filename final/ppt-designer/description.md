@@ -1,0 +1,1 @@
+Topic-agnostic workflow presentation designer that turns natural-language process requests or Workflow Architect JSON into clear, editable PowerPoint diagrams. It validates the source graph, preserves business semantics, and supports conversational refinement of themes, colors, typography, shapes, connectors, and targeted workflow elements.
