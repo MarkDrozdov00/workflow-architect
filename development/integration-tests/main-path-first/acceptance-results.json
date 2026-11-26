@@ -1,0 +1,384 @@
+{
+  "employee-leave": {
+    "status": "success",
+    "elapsed_seconds": 0.374,
+    "nodes": 7,
+    "edges": 7,
+    "source_sha256": "1f6a8c52dc6118ab36089e42679fec24bbd68f32579d69c097872cc61d05afbb",
+    "slides": 1,
+    "diagram_slides": 1,
+    "node_coverage": {
+      "expected": 7,
+      "rendered": 7,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 7,
+      "represented": 7,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 0,
+    "split_immediate_outcomes": 0,
+    "connector_crossings": 0,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "process_areas were not provided; actor definitions were used as process areas."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/employee-leave.pptx"
+  },
+  "qes-overview": {
+    "status": "success",
+    "elapsed_seconds": 6.912,
+    "nodes": 17,
+    "edges": 19,
+    "source_sha256": "6f9e9f2a3521d7328b80b9f43be4079e079befdeeb4f0c0564ce4f44b50aba70",
+    "slides": 2,
+    "diagram_slides": 2,
+    "node_coverage": {
+      "expected": 17,
+      "rendered": 17,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 19,
+      "represented": 19,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 1,
+    "split_immediate_outcomes": 3,
+    "connector_crossings": 1,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 2; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 54.43 exceeds the compact one-slide limit 48.0."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/qes-overview.pptx"
+  },
+  "qes-detailed": {
+    "status": "success",
+    "elapsed_seconds": 21.931,
+    "nodes": 28,
+    "edges": 30,
+    "source_sha256": "fcabc3441cfc8408003faa631e95be1a3ed1589c5c806d8152623be14b4e0b9b",
+    "slides": 3,
+    "diagram_slides": 3,
+    "node_coverage": {
+      "expected": 28,
+      "rendered": 28,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 30,
+      "represented": 30,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 1,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 1,
+    "split_immediate_outcomes": 3,
+    "connector_crossings": 19,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 2; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 94.01 exceeds the compact one-slide limit 48.0.",
+      "The initial composition failed a hard layout constraint; adaptive recovery selected initial process map legacy order."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/qes-detailed.pptx"
+  },
+  "expense-overview": {
+    "status": "success",
+    "elapsed_seconds": 6.363,
+    "nodes": 15,
+    "edges": 17,
+    "source_sha256": "8d1609aebdecf1bdb6edc7063ed5e2c86a085e47942567669bd5424f2682ae75",
+    "slides": 1,
+    "diagram_slides": 1,
+    "node_coverage": {
+      "expected": 15,
+      "rendered": 15,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 17,
+      "represented": 17,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 0,
+    "split_immediate_outcomes": 0,
+    "connector_crossings": 7,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 4; labels remain clear of connector strokes and slide boundaries."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/expense-overview.pptx"
+  },
+  "expense-detailed": {
+    "status": "success",
+    "elapsed_seconds": 5.307,
+    "nodes": 24,
+    "edges": 25,
+    "source_sha256": "a1de8fddcb40640108467a8ae2c61ec3c2e7adc2fa5e42a52f47e6cb90132ab7",
+    "slides": 2,
+    "diagram_slides": 2,
+    "node_coverage": {
+      "expected": 24,
+      "rendered": 24,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 25,
+      "represented": 25,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 1,
+    "split_immediate_outcomes": 0,
+    "connector_crossings": 11,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 1; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 72.37 exceeds the compact one-slide limit 48.0."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/expense-detailed.pptx"
+  },
+  "supplier-invoice-overview": {
+    "status": "success",
+    "elapsed_seconds": 28.741,
+    "nodes": 22,
+    "edges": 27,
+    "source_sha256": "1ea3059594c4b71a52e00e12eecf803db02ca96b71341ed34ce28e4064244a71",
+    "slides": 3,
+    "diagram_slides": 3,
+    "node_coverage": {
+      "expected": 22,
+      "rendered": 22,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 27,
+      "represented": 27,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 3,
+    "split_immediate_outcomes": 2,
+    "connector_crossings": 3,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 3; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 79.95 exceeds the balanced one-slide limit 40.0.",
+      "The initial composition failed a hard layout constraint; adaptive recovery selected initial process map balanced."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/supplier-invoice-overview.pptx"
+  },
+  "supplier-invoice-detailed": {
+    "status": "success",
+    "elapsed_seconds": 17.335,
+    "nodes": 32,
+    "edges": 37,
+    "source_sha256": "110fc2a590e06ce8fa6522df31fe5d9cb51d2e38cdac73eee2dc21facbf0e0c8",
+    "slides": 3,
+    "diagram_slides": 3,
+    "node_coverage": {
+      "expected": 32,
+      "rendered": 32,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 37,
+      "represented": 37,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 2,
+    "split_immediate_outcomes": 0,
+    "connector_crossings": 11,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 3; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 103.27 exceeds the compact one-slide limit 48.0.",
+      "The initial composition failed a hard layout constraint; adaptive recovery selected initial process map legacy order."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/supplier-invoice-detailed.pptx"
+  },
+  "banking-34": {
+    "status": "success",
+    "elapsed_seconds": 25.305,
+    "nodes": 34,
+    "edges": 45,
+    "source_sha256": "4fd68e52c0551d0011d54722c2003bca2876003b453b2afacf7ca65ab9f2575a",
+    "slides": 3,
+    "diagram_slides": 3,
+    "node_coverage": {
+      "expected": 34,
+      "rendered": 34,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 45,
+      "represented": 45,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 6,
+    "split_immediate_outcomes": 5,
+    "connector_crossings": 26,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "No collision-free connector-label position for all_requirements_cleared -> await_outstanding_result; the least ambiguous position was used.",
+      "No collision-free connector-label position for manual_review_outcome -> compliance_not_cleared; the least ambiguous position was used.",
+      "No collision-free connector-label position for manual_review_outcome -> request_additional_information; the least ambiguous position was used.",
+      "Preferred slide count was 2; 3 diagram slides were required to preserve readability and semantic integrity.",
+      "Decision group nfc_available spans slides: overlapping group constraints.",
+      "Decision group nfc_successful spans slides: overlapping group constraints.",
+      "Decision group scan_verification_successful spans slides: overlapping group constraints.",
+      "Decision group select_identity_fallback spans slides: overlapping group constraints."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/banking-34.pptx"
+  },
+  "banking-51": {
+    "status": "success",
+    "elapsed_seconds": 40.591,
+    "nodes": 51,
+    "edges": 70,
+    "source_sha256": "2560f8af0cd8729596e36f65fc08d8ca0ebb8c5d4ae194ba0aef2d8e94c3f828",
+    "slides": 6,
+    "diagram_slides": 6,
+    "node_coverage": {
+      "expected": 51,
+      "rendered": 51,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 70,
+      "represented": 70,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 9,
+    "split_immediate_outcomes": 10,
+    "connector_crossings": 15,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 10; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 214.75 exceeds the compact one-slide limit 48.0.",
+      "The initial composition failed a hard layout constraint; adaptive recovery selected initial process map legacy order."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/banking-51.pptx"
+  },
+  "credit-card-68": {
+    "status": "error",
+    "elapsed_seconds": 110.148,
+    "nodes": 68,
+    "edges": 94,
+    "source_sha256": "d0845832457811ebc8d5e036f847263698b282f2b7d0f82e766e8a14ae2775bb",
+    "slides": null,
+    "diagram_slides": null,
+    "node_coverage": null,
+    "edge_coverage": null,
+    "ordinary_backward_edges": null,
+    "primary_backward_edges": null,
+    "primary_cross_slide_edges": null,
+    "split_immediate_outcomes": null,
+    "connector_crossings": null,
+    "geometry_status": null,
+    "errors": [
+      "Adaptive layout recovery exhausted all deterministic candidates. Attempts: initial (6 slides): Unable to route edge credit_result -> business_decline: Composition candidate routing budget exhausted.; initial_process_map_legacy_order (6 slides): Unable to route edge eligible_account -> account_choice: Routing execution budget exhausted after 110 seconds; affected operation: orthogonal obstacle routing; grid expansions: 543689; continuation candidates: 0. No partial PowerPoint was accepted. Consider a less detailed workflow or separate subprocess presentations.; initial_process_map_balanced (6 slides): Unable to route edge start -> select_product: Routing execution budget exhausted after 110 seconds; affected operation: orthogonal obstacle routing; grid expansions: 543689; continuation candidates: 0. No partial PowerPoint was accepted. Consider a less detailed workflow or separate subprocess presentations.; initial_process_map_compact_spacing (6 slides): Unable to route edge start -> select_product: Routing execution budget exhausted after 110 seconds; affected operation: orthogonal obstacle routing; grid expansions: 543689; continuation candidates: 0. No partial PowerPoint was accepted. Consider a less detailed workflow or separate subprocess presentations.; initial_process_map_detailed (6 slides): Unable to route edge start -> select_product: Routing execution budget exhausted after 110 seconds; affected operation: orthogonal obstacle routing; grid expansions: 543689; continuation candidates: 0. No partial PowerPoint was accepted. Consider a less detailed workflow or separate subprocess presentations."
+    ],
+    "warnings": [],
+    "pptx": null
+  },
+  "credit-card-business": {
+    "status": "success",
+    "elapsed_seconds": 6.748,
+    "nodes": 24,
+    "edges": 30,
+    "source_sha256": "070a72acd6ee055d9eb12f53666ce01e61352e16700c92c76f4ce129a294b93e",
+    "slides": 3,
+    "diagram_slides": 3,
+    "node_coverage": {
+      "expected": 24,
+      "rendered": 24,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 30,
+      "represented": 30,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 3,
+    "split_immediate_outcomes": 3,
+    "connector_crossings": 17,
+    "geometry_status": "clean_with_warnings",
+    "errors": [],
+    "warnings": [
+      "Branch-label proximity warnings: 2; labels remain clear of connector strokes and slide boundaries.",
+      "Process map paginated before routing: complexity score 70.48 exceeds the compact one-slide limit 48.0."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/credit-card-business.pptx"
+  },
+  "credit-card-corporate-expanded": {
+    "status": "success",
+    "elapsed_seconds": 3.614,
+    "nodes": 28,
+    "edges": 35,
+    "source_sha256": "e60697815d4ca1f7c5181c168ae595dfe68e6a75881ed2a2c699a27e5b162114",
+    "slides": 6,
+    "diagram_slides": 6,
+    "node_coverage": {
+      "expected": 28,
+      "rendered": 27,
+      "missing": [],
+      "duplicates": []
+    },
+    "edge_coverage": {
+      "expected": 35,
+      "represented": 35,
+      "missing_indices": []
+    },
+    "ordinary_backward_edges": 0,
+    "primary_backward_edges": 0,
+    "primary_cross_slide_edges": 6,
+    "split_immediate_outcomes": 1,
+    "connector_crossings": 6,
+    "geometry_status": "clean",
+    "errors": [],
+    "warnings": [
+      "The initial composition failed a hard layout constraint; adaptive recovery selected routing space capacity 5.",
+      "Decision group applicant_type spans slides: group exceeds one-slide capacity."
+    ],
+    "pptx": "development/integration-tests/main-path-first/after/credit-card-corporate-expanded.pptx"
+  }
+}

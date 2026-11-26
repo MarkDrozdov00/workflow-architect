@@ -1,0 +1,505 @@
+{
+  "title": "Existing-Customer Credit Card Application — Corporate Verification Detail",
+  "description": "Business overview for authenticated individual and corporate customers applying for account-linked or standalone credit cards.",
+  "domain": "Retail and Corporate Banking",
+  "version": "1.1",
+  "actors": [
+    {
+      "id": "customer",
+      "label": "Customer"
+    },
+    {
+      "id": "digital",
+      "label": "Digital Banking"
+    },
+    {
+      "id": "bank",
+      "label": "Bank Operations"
+    },
+    {
+      "id": "credit",
+      "label": "Credit Decisioning"
+    }
+  ],
+  "phases": [
+    {
+      "id": "application",
+      "label": "Application"
+    },
+    {
+      "id": "verification",
+      "label": "Verification and Assessment"
+    },
+    {
+      "id": "completion",
+      "label": "Acceptance and Issuance"
+    }
+  ],
+  "process_areas": [
+    {
+      "id": "journey",
+      "label": "Authenticated digital journey",
+      "order": 1
+    },
+    {
+      "id": "review",
+      "label": "Bank review",
+      "order": 2
+    },
+    {
+      "id": "issuance",
+      "label": "Card issuance",
+      "order": 3
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "label": "Start authenticated application",
+      "owner": "customer",
+      "phase": "application",
+      "process_area": "journey"
+    },
+    {
+      "id": "choose_product",
+      "type": "manual_action",
+      "label": "Choose account-linked or standalone card",
+      "owner": "customer",
+      "phase": "application",
+      "process_area": "journey"
+    },
+    {
+      "id": "duplicate_check",
+      "type": "process",
+      "label": "Check relationship and duplicate application",
+      "description": "Common technical retry and duplicate-prevention controls apply without changing the customer's business journey.",
+      "owner": "digital",
+      "phase": "application",
+      "process_area": "journey"
+    },
+    {
+      "id": "application_accepted",
+      "type": "decision",
+      "label": "Application accepted for processing?",
+      "owner": "digital",
+      "phase": "application",
+      "process_area": "journey"
+    },
+    {
+      "id": "duplicate_or_outside_scope",
+      "type": "end",
+      "label": "Application stopped or duplicate prevented",
+      "owner": "digital",
+      "phase": "application",
+      "process_area": "journey"
+    },
+    {
+      "id": "reuse_data",
+      "type": "process",
+      "label": "Reuse and validate customer data",
+      "owner": "digital",
+      "phase": "verification",
+      "process_area": "journey"
+    },
+    {
+      "id": "data_current",
+      "type": "decision",
+      "label": "Information current and complete?",
+      "owner": "digital",
+      "phase": "verification",
+      "process_area": "journey"
+    },
+    {
+      "id": "update_data",
+      "type": "manual_action",
+      "label": "Update missing or outdated information",
+      "owner": "customer",
+      "phase": "verification",
+      "process_area": "journey"
+    },
+    {
+      "id": "verify_identity",
+      "type": "subprocess",
+      "label": "Reuse or complete identity verification",
+      "description": "Valid existing verification is reused; otherwise additional verification is completed. Unresolved verification moves to assisted review.",
+      "owner": "digital",
+      "phase": "verification",
+      "process_area": "journey"
+    },
+    {
+      "id": "applicant_type",
+      "type": "decision",
+      "label": "Individual or corporate?",
+      "owner": "digital",
+      "phase": "verification",
+      "process_area": "journey"
+    },
+    {
+      "id": "company_profile",
+      "type": "process",
+      "label": "Validate company profile and status",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "representative",
+      "type": "process",
+      "label": "Identify authorized representative",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "authority_evidence",
+      "type": "process",
+      "label": "Review signing-authority evidence",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "authority_valid",
+      "type": "decision",
+      "label": "Signing authority verified?",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "authority_information",
+      "type": "manual_action",
+      "label": "Provide missing authority information",
+      "owner": "customer",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "assess",
+      "type": "subprocess",
+      "label": "Run eligibility and credit assessment",
+      "description": "Automated checks apply where possible; common technical failures remain pending for recovery under bank policy.",
+      "owner": "credit",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "assessment_outcome",
+      "type": "decision",
+      "label": "Assessment outcome?",
+      "owner": "credit",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "manual_review",
+      "type": "manual_action",
+      "label": "Complete manual review",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "manual_outcome",
+      "type": "decision",
+      "label": "Manual review outcome?",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "pending_information",
+      "type": "process",
+      "label": "Pending customer information",
+      "owner": "customer",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "declined",
+      "type": "end",
+      "label": "Application declined",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    },
+    {
+      "id": "present_terms",
+      "type": "process",
+      "label": "Present contractual terms",
+      "owner": "digital",
+      "phase": "completion",
+      "process_area": "issuance"
+    },
+    {
+      "id": "terms_accepted",
+      "type": "decision",
+      "label": "Terms accepted?",
+      "owner": "customer",
+      "phase": "completion",
+      "process_area": "issuance"
+    },
+    {
+      "id": "pending_acceptance",
+      "type": "process",
+      "label": "Pending contractual acceptance",
+      "owner": "customer",
+      "phase": "completion",
+      "process_area": "issuance"
+    },
+    {
+      "id": "issue_card",
+      "type": "process",
+      "label": "Issue card",
+      "owner": "bank",
+      "phase": "completion",
+      "process_area": "issuance"
+    },
+    {
+      "id": "notify_customer",
+      "type": "process",
+      "label": "Notify customer",
+      "owner": "digital",
+      "phase": "completion",
+      "process_area": "issuance"
+    },
+    {
+      "id": "success",
+      "type": "end",
+      "label": "Card issued successfully",
+      "owner": "digital",
+      "phase": "completion",
+      "process_area": "issuance"
+    },
+    {
+      "id": "assisted_pending",
+      "type": "end",
+      "label": "Pending assisted resolution",
+      "description": "Recoverable handoff for unresolved verification or technical processing; not a declined application.",
+      "owner": "bank",
+      "phase": "verification",
+      "process_area": "review"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "choose_product",
+      "path": "main"
+    },
+    {
+      "from": "choose_product",
+      "to": "duplicate_check",
+      "path": "main"
+    },
+    {
+      "from": "duplicate_check",
+      "to": "application_accepted",
+      "path": "main"
+    },
+    {
+      "from": "application_accepted",
+      "to": "reuse_data",
+      "label": "Yes",
+      "path": "main"
+    },
+    {
+      "from": "application_accepted",
+      "to": "duplicate_or_outside_scope",
+      "label": "No",
+      "path": "alternative"
+    },
+    {
+      "from": "reuse_data",
+      "to": "data_current",
+      "path": "main"
+    },
+    {
+      "from": "data_current",
+      "to": "verify_identity",
+      "label": "Yes",
+      "path": "main"
+    },
+    {
+      "from": "data_current",
+      "to": "update_data",
+      "label": "No",
+      "path": "recovery"
+    },
+    {
+      "from": "update_data",
+      "to": "reuse_data",
+      "label": "Resubmit",
+      "path": "recovery"
+    },
+    {
+      "from": "verify_identity",
+      "to": "applicant_type",
+      "label": "Verified",
+      "path": "main"
+    },
+    {
+      "from": "verify_identity",
+      "to": "assisted_pending",
+      "label": "Unresolved",
+      "path": "exception"
+    },
+    {
+      "from": "applicant_type",
+      "to": "assess",
+      "label": "Individual",
+      "path": "main"
+    },
+    {
+      "from": "assess",
+      "to": "assessment_outcome",
+      "path": "main"
+    },
+    {
+      "from": "assessment_outcome",
+      "to": "present_terms",
+      "label": "Approved",
+      "path": "main"
+    },
+    {
+      "from": "assessment_outcome",
+      "to": "declined",
+      "label": "Declined",
+      "path": "alternative"
+    },
+    {
+      "from": "assessment_outcome",
+      "to": "manual_review",
+      "label": "Inconclusive",
+      "path": "alternative"
+    },
+    {
+      "from": "manual_review",
+      "to": "manual_outcome",
+      "path": "alternative"
+    },
+    {
+      "from": "manual_outcome",
+      "to": "present_terms",
+      "label": "Approved",
+      "path": "main"
+    },
+    {
+      "from": "manual_outcome",
+      "to": "declined",
+      "label": "Declined",
+      "path": "alternative"
+    },
+    {
+      "from": "manual_outcome",
+      "to": "pending_information",
+      "label": "More information",
+      "path": "recovery"
+    },
+    {
+      "from": "pending_information",
+      "to": "manual_review",
+      "label": "Information supplied",
+      "path": "recovery"
+    },
+    {
+      "from": "present_terms",
+      "to": "terms_accepted",
+      "path": "main"
+    },
+    {
+      "from": "terms_accepted",
+      "to": "issue_card",
+      "label": "Yes",
+      "path": "main"
+    },
+    {
+      "from": "terms_accepted",
+      "to": "pending_acceptance",
+      "label": "Not yet",
+      "path": "recovery"
+    },
+    {
+      "from": "pending_acceptance",
+      "to": "present_terms",
+      "label": "Continue",
+      "path": "recovery"
+    },
+    {
+      "from": "issue_card",
+      "to": "notify_customer",
+      "path": "main"
+    },
+    {
+      "from": "notify_customer",
+      "to": "success",
+      "path": "main"
+    },
+    {
+      "from": "applicant_type",
+      "to": "company_profile",
+      "label": "Corporate",
+      "path": "alternative"
+    },
+    {
+      "from": "company_profile",
+      "to": "representative",
+      "path": "alternative"
+    },
+    {
+      "from": "representative",
+      "to": "authority_evidence",
+      "path": "alternative"
+    },
+    {
+      "from": "authority_evidence",
+      "to": "authority_valid",
+      "path": "alternative"
+    },
+    {
+      "from": "authority_valid",
+      "to": "assess",
+      "label": "Yes",
+      "path": "main"
+    },
+    {
+      "from": "authority_valid",
+      "to": "authority_information",
+      "label": "More information",
+      "path": "recovery"
+    },
+    {
+      "from": "authority_information",
+      "to": "authority_evidence",
+      "label": "Resubmit",
+      "path": "recovery"
+    },
+    {
+      "from": "authority_valid",
+      "to": "assisted_pending",
+      "label": "Unresolved",
+      "path": "exception"
+    }
+  ],
+  "assumptions": [
+    "The customer already has an active authenticated relationship with the bank.",
+    "Account-linked and standalone products use the same high-level assessment and acceptance journey.",
+    "Retry limits and definitive identity-failure policy remain bank-specific."
+  ],
+  "open_questions": [
+    "Which verification failures may be resolved through assisted review?",
+    "What time limits apply to pending information and contractual acceptance?"
+  ],
+  "metadata": {
+    "abstraction_level": "business_overview",
+    "source_workflow": "credit_card_workflow_internal.json",
+    "outcome_classification": {
+      "success": "successful",
+      "declined": "unsuccessful",
+      "duplicate_or_outside_scope": "unsuccessful",
+      "assisted_pending": "recoverable"
+    },
+    "refinement_scope": "corporate_verification_and_signing_authority"
+  }
+}

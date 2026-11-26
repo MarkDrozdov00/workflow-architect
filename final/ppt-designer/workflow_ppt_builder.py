@@ -691,6 +691,101 @@ class SlideCompositionPlan:
     strategy: str
 
 
+def analyze_main_path(workflow: dict[str, Any]) -> dict[str, Any]:
+    """Identify source-supported primary journeys without changing the graph.
+
+    Explicit ``main``/``parallel`` edges define the preferred business
+    progression. Outcome metadata is used only to distinguish confirmed
+    successful terminals; labels and node IDs are never interpreted as policy.
+    When metadata does not establish a successful destination, the analysis
+    reports that limitation and retains every explicit main edge.
+    """
+    nodes = {node["id"]: node for node in workflow["nodes"]}
+    input_order = {node["id"]: index for index, node in enumerate(workflow["nodes"])}
+    edges = list(workflow["edges"])
+    forward = [(index, edge) for index, edge in enumerate(edges)
+               if edge.get("path", "main") != "recovery"]
+    classifications = (workflow.get("metadata") or {}).get("outcome_classification") or {}
+    successful = {node_id for node_id, value in classifications.items()
+                  if str(value).lower() in {"successful", "success", "completed", "fulfilled"} and
+                  node_id in nodes}
+    reverse: dict[str, list[str]] = defaultdict(list)
+    outgoing: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
+    incoming: dict[str, list[str]] = defaultdict(list)
+    for edge_index, edge in forward:
+        reverse[edge["to"]].append(edge["from"])
+        outgoing[edge["from"]].append((edge_index, edge))
+        incoming[edge["to"]].append(edge["from"])
+    reaches_success = set(successful)
+    queue = deque(sorted(successful, key=input_order.get))
+    while queue:
+        target = queue.popleft()
+        for source in reverse.get(target, []):
+            if source not in reaches_success:
+                reaches_success.add(source); queue.append(source)
+
+    preferred_edge_ids: set[int] = set()
+    for source, candidates in outgoing.items():
+        explicit = [(index, edge) for index, edge in candidates
+                    if edge.get("path", "main") in {"main", "parallel"} and
+                    (not successful or edge["to"] in reaches_success)]
+        if not explicit and successful:
+            explicit = [(index, edge) for index, edge in candidates
+                        if edge["to"] in reaches_success and edge.get("path") != "exception"]
+        preferred_edge_ids.update(index for index, _ in explicit)
+
+    starts = [node_id for node_id, node in nodes.items() if node.get("type") == "start"]
+    if not starts:
+        starts = [node_id for node_id in nodes if not incoming.get(node_id)]
+    preferred_outgoing: dict[str, list[str]] = defaultdict(list)
+    for edge_index in preferred_edge_ids:
+        edge = edges[edge_index]; preferred_outgoing[edge["from"]].append(edge["to"])
+    distance = {node_id: 0 for node_id in starts}
+    queue = deque(sorted(starts, key=input_order.get))
+    while queue:
+        source = queue.popleft()
+        for target in sorted(preferred_outgoing.get(source, []), key=input_order.get):
+            candidate = distance[source] + 1
+            if target not in distance or candidate < distance[target]:
+                distance[target] = candidate; queue.append(target)
+    primary_nodes = set(distance)
+
+    # Alternatives inherit the distance of their closest ordinary predecessor
+    # so they stay near the decision that causes them instead of being sorted
+    # among unrelated late-stage activities.
+    anchor_distance = dict(distance)
+    for _ in range(len(nodes)):
+        changed = False
+        for _, edge in forward:
+            if edge["from"] in anchor_distance:
+                candidate = anchor_distance[edge["from"]] + 1
+                if edge["to"] not in anchor_distance or candidate < anchor_distance[edge["to"]]:
+                    anchor_distance[edge["to"]] = candidate; changed = True
+        if not changed:
+            break
+    phase_order = {phase["id"]: index for index, phase in enumerate(workflow.get("phases") or [])}
+    semantic_order = sorted(
+        nodes,
+        key=lambda node_id: (
+            phase_order.get(nodes[node_id].get("phase"), len(phase_order)),
+            anchor_distance.get(node_id, 10**6),
+            0 if node_id in primary_nodes else 1,
+            input_order[node_id],
+        ),
+    )
+    return {
+        "successful_terminal_ids": sorted(successful, key=input_order.get),
+        "success_metadata_available": bool(successful),
+        "primary_edge_ids": sorted(preferred_edge_ids),
+        "primary_node_ids": [node_id for node_id in semantic_order if node_id in primary_nodes],
+        "decision_ids": sorted((node_id for node_id, node in nodes.items()
+                                if node.get("type") == "decision"), key=input_order.get),
+        "semantic_node_order": semantic_order,
+        "semantic_index": {node_id: index for index, node_id in enumerate(semantic_order)},
+        "distance": distance,
+    }
+
+
 def build_slide_composition_plan(workflow: dict[str, Any], page_of: dict[str, int],
                                  ordered_pages: list[list[str]], strategy: str) -> SlideCompositionPlan:
     """Create a coordinate-independent, lossless presentation plan."""
@@ -822,6 +917,8 @@ def calculate_layout(workflow: dict[str, Any], layout: str = "flowchart",
     if rendering_mode not in {"compact", "balanced", "detailed"}:
         raise ValueError("rendering_mode must be 'compact', 'balanced', or 'detailed'")
     nodes = {n["id"]: n for n in workflow["nodes"]}
+    main_path = analyze_main_path(workflow)
+    semantic_index = main_path["semantic_index"]
     if ranks_per_page is not None:
         capacity = ranks_per_page
     elif rendering_mode == "compact":
@@ -845,10 +942,11 @@ def calculate_layout(workflow: dict[str, Any], layout: str = "flowchart",
         adjacency[e["from"]].append(e["to"])
         indegree[e["to"]] += 1
     for values in adjacency.values():
-        values.sort()
+        values.sort(key=lambda node_id: semantic_index.get(node_id, 10**6))
 
     rank = {nid: 0 for nid, n in nodes.items() if n["type"] == "start"}
-    queue = deque(sorted(n for n, d in indegree.items() if d == 0))
+    queue = deque(sorted((n for n, d in indegree.items() if d == 0),
+                         key=lambda node_id: semantic_index.get(node_id, 10**6)))
     # Recovery-only entry points also have zero forward indegree. Seed them at
     # rank zero so their non-recovery fallback edges participate in normal
     # ordering instead of being assigned an artificial final rank later.
@@ -867,7 +965,7 @@ def calculate_layout(workflow: dict[str, Any], layout: str = "flowchart",
 
     # Cycles remain after Kahn's algorithm. Assign stable shortest-path ranks and
     # classify edges pointing to the same or an earlier rank as retry/back edges.
-    bfs = deque(sorted(rank, key=lambda n: (rank[n], n)))
+    bfs = deque(sorted(rank, key=lambda n: (rank[n], semantic_index.get(n, 10**6))))
     seen = set(bfs)
     while bfs:
         src = bfs.popleft()
@@ -928,6 +1026,7 @@ def calculate_layout(workflow: dict[str, Any], layout: str = "flowchart",
     decision_groups = _build_decision_groups(workflow, nodes, rank, ordered_ranks, capacity)
     phase_breaks = _phase_breaks(nodes, rank, ordered_ranks)
     graph_analysis = analyze_workflow_graph(workflow, rank)
+    graph_analysis["main_path"] = main_path
     rank_widths = {value: max((_node_size(nodes[node_id], rendering_mode)[0]
                               for node_id in nodes if rank[node_id] == value), default=0.9)
                    for value in ordered_ranks}
@@ -952,7 +1051,7 @@ def calculate_layout(workflow: dict[str, Any], layout: str = "flowchart",
     rank_page = {r: (page, column) for page, ranks in enumerate(page_ranks) for column, r in enumerate(ranks)}
     placements = {}
     for (r, lane), ids in sorted(buckets.items()):
-        for slot, nid in enumerate(sorted(ids)):
+        for slot, nid in enumerate(sorted(ids, key=lambda node_id: semantic_index.get(node_id, 10**6))):
             page, column = rank_page[r]
             placements[nid] = Placement(nid, page, r, lane, slot, column)
     # Repair semantic groups only when pagination actually separates them.
@@ -1487,15 +1586,54 @@ def _composition_candidate_score(pages, workflow, rank, decision_groups, rank_wi
         utilization.append(min(1.0, used / width_budget))
     sparse = sum(value < 0.38 for value in utilization)
     preference_gap = abs(len(pages) - preferred_slide_count) if preferred_slide_count else 0
+    node_page = {node_id: page_of.get(rank_value)
+                 for node_id, rank_value in rank.items()}
+    readability = _main_path_page_metrics(workflow, node_page, graph_analysis.get("main_path"))
     total = (len(pages) * 95 + cross_edges * 13 + split_decisions * 90 +
              split_recovery * 70 + split_terminals * 65 + sparse * 80 +
-             preference_gap * 12 + sum((1 - value) ** 2 for value in utilization) * 18)
+             preference_gap * 12 + sum((1 - value) ** 2 for value in utilization) * 18 +
+             readability["ordinary_backward_edges"] * 130 +
+             readability["primary_backward_edges"] * 500 +
+             readability["primary_cross_slide_edges"] * 42 +
+             readability["split_immediate_outcomes"] * 75)
     return {"valid": valid, "slide_count": len(pages), "nodes_per_slide": [],
             "slide_utilization": [round(value, 3) for value in utilization],
             "cross_slide_edges": cross_edges, "split_decision_groups": split_decisions,
             "split_recovery_loops": split_recovery, "isolated_terminal_groups": split_terminals,
+            **readability,
             "sparse_slides": sparse, "preferred_slide_count": preferred_slide_count,
             "total_cost": round(total, 3)}
+
+
+def _main_path_page_metrics(workflow: dict[str, Any], node_page: dict[str, int | None],
+                            analysis: dict[str, Any] | None = None) -> dict[str, int]:
+    """Measure semantic reading-order defects independently of geometry."""
+    analysis = analysis or analyze_main_path(workflow)
+    primary_edges = set(analysis.get("primary_edge_ids", []))
+    ordinary_backward = 0; primary_backward = 0; primary_cross = 0
+    split_outcomes = 0
+    decision_ids = set(analysis.get("decision_ids", []))
+    if workflow.get("nodes"):
+        decision_ids.update(node["id"] for node in workflow["nodes"]
+                            if node.get("type") == "decision")
+    for edge_index, edge in enumerate(workflow["edges"]):
+        source_page = node_page.get(edge["from"]); target_page = node_page.get(edge["to"])
+        if source_page is None or target_page is None:
+            continue
+        if edge_index in primary_edges and source_page != target_page:
+            primary_cross += 1
+        if target_page < source_page and edge.get("path", "main") != "recovery":
+            ordinary_backward += 1
+            primary_backward += edge_index in primary_edges
+        if (edge["from"] in decision_ids and
+                edge.get("path", "main") != "recovery" and source_page != target_page):
+            split_outcomes += 1
+    return {
+        "ordinary_backward_edges": ordinary_backward,
+        "primary_backward_edges": primary_backward,
+        "primary_cross_slide_edges": primary_cross,
+        "split_immediate_outcomes": split_outcomes,
+    }
 
 
 def _adaptive_layout_candidate_score(layout_result: LayoutResult,
@@ -1522,14 +1660,24 @@ def _adaptive_layout_candidate_score(layout_result: LayoutResult,
     mean = sum(counts) / max(1, len(counts))
     imbalance = sum((count - mean) ** 2 for count in counts) / max(1, len(counts))
     preference_gap = abs(layout_result.pages - preferred_slide_count) if preferred_slide_count else 0
+    readability = _main_path_page_metrics(
+        workflow,
+        {node_id: placement.page for node_id, placement in layout_result.placements.items()},
+        layout_result.graph_analysis.get("main_path"),
+    )
     total = (single_node * 1200 + sparse * 500 + split_groups * 85 +
              cross_edges * 18 + layout_result.pages * 95 +
-             layout_result.unused_space * 160 + imbalance * 4 + preference_gap * 10)
+             layout_result.unused_space * 160 + imbalance * 4 + preference_gap * 10 +
+             readability["ordinary_backward_edges"] * 140 +
+             readability["primary_backward_edges"] * 550 +
+             readability["primary_cross_slide_edges"] * 45 +
+             readability["split_immediate_outcomes"] * 80)
     return {
         "total_cost": round(total, 3), "slide_count": layout_result.pages,
         "nodes_per_slide": counts, "single_node_slides": single_node,
         "sparse_slides": sparse, "cross_slide_edges": cross_edges,
         "split_logical_groups": split_groups,
+        **readability,
         "unused_space": layout_result.unused_space,
     }
 
@@ -1625,10 +1773,14 @@ def analyze_process_map_complexity(workflow: dict[str, Any]) -> ProcessMapComple
                                 branches, merges, cycles, text_units)
 
 
-def paginate_process_map(workflow: dict[str, Any], density: str = "compact") -> ProcessMapPagination:
+def paginate_process_map(workflow: dict[str, Any], density: str = "compact",
+                         composition_order: str = "main_path") -> ProcessMapPagination:
     """Partition a process map before geometry is calculated."""
     complexity = analyze_process_map_complexity(workflow)
     nodes = workflow["nodes"]
+    main_path = analyze_main_path(workflow)
+    semantic_index = (main_path["semantic_index"] if composition_order == "main_path" else
+                      {node["id"]: index for index, node in enumerate(nodes)})
     single_limit = {"compact": 48.0, "balanced": 40.0, "detailed": 32.0}[density]
     node_limit = {"compact": 18, "balanced": 15, "detailed": 12}[density]
     if complexity.score <= single_limit and len(nodes) <= node_limit:
@@ -1643,12 +1795,16 @@ def paginate_process_map(workflow: dict[str, Any], density: str = "compact") -> 
     groups: list[tuple[str, list[str]]] = []
     if use_phases:
         for phase_id in phase_order:
-            members = [node["id"] for node in nodes if node.get("phase") == phase_id]
+            members = sorted(
+                (node["id"] for node in nodes if node.get("phase") == phase_id),
+                key=lambda node_id: semantic_index.get(node_id, 10**6),
+            )
             if members:
                 groups.append((phase_labels[phase_id], members))
     else:
         ranks = _graph_ranks(workflow)
-        ordered = sorted(nodes, key=lambda node: (ranks[node["id"]], node["id"]))
+        ordered = sorted(nodes, key=lambda node: (ranks[node["id"]],
+                                                   semantic_index.get(node["id"], 10**6)))
         fallback_limit = min(node_limit, max(4, int(node_limit * single_limit / max(single_limit, complexity.score))))
         for index in range(0, len(ordered), fallback_limit):
             groups.append((f"Steps {index + 1}–{min(len(ordered), index + fallback_limit)}",
@@ -1749,12 +1905,16 @@ def _split_group_with_decisions(workflow, members, limit):
 
 
 def plan_process_map(workflow: dict[str, Any], density: str = "compact",
-                     spacing: str = "standard") -> ProcessMapPlan:
+                     spacing: str = "standard",
+                     composition_order: str = "main_path") -> ProcessMapPlan:
     """Plan one landscape slide using process areas and multiple rows per area."""
     nodes = {node["id"]: node for node in workflow["nodes"]}
     areas, warnings = _areas(workflow)
     area_ids = {area["id"] for area in areas}
     rank = _graph_ranks(workflow)
+    semantic_index = (analyze_main_path(workflow)["semantic_index"]
+                      if composition_order == "main_path" else
+                      {node_id: index for index, node_id in enumerate(sorted(nodes))})
     membership: dict[str, str] = {}
     for node_id, node in nodes.items():
         hint = node.get("layout_hint") or {}
@@ -1770,7 +1930,7 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
 
     assigned_rows: dict[str, int] = {}
     group_rows: dict[tuple[str, str], int] = {}
-    for node_id in sorted(nodes, key=lambda value: (rank[value], value)):
+    for node_id in sorted(nodes, key=lambda value: (rank[value], semantic_index.get(value, 10**6))):
         node = nodes[node_id]; area_id = membership[node_id]; hint = node.get("layout_hint") or {}
         preferred = hint.get("preferred_row")
         if preferred is not None and (not isinstance(preferred, int) or preferred < 1 or preferred > 8):
@@ -1801,7 +1961,7 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
         for original_row in sorted({assigned_rows[node_id] for node_id in area_members}):
             members = sorted(
                 (node_id for node_id in area_members if assigned_rows[node_id] == original_row),
-                key=lambda value: (rank[value], value),
+                key=lambda value: (rank[value], semantic_index.get(value, 10**6)),
             )
             current: list[str] = []
             current_width = 0.0
@@ -1838,7 +1998,7 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
         row_height = area.h / row_count
         for row in range(row_count):
             members = [nid for nid in nodes if membership[nid] == area.id and assigned_rows[nid] == row]
-            members.sort(key=lambda value: (rank[value], value))
+            members.sort(key=lambda value: (rank[value], semantic_index.get(value, 10**6)))
             if not members:
                 continue
             sizes = []
@@ -2096,6 +2256,12 @@ def _set_text(shape, text: str, theme: Theme, size: float = 12, bold: bool = Fal
     frame.margin_top = frame.margin_bottom = Inches(vertical_padding); frame.vertical_anchor = MSO_ANCHOR.MIDDLE
     alignments = {"left": PP_ALIGN.LEFT, "center": PP_ALIGN.CENTER, "right": PP_ALIGN.RIGHT}
     p = frame.paragraphs[0]; p.alignment = alignments.get(typography.get("text_alignment"), PP_ALIGN.CENTER)
+    # Serialize explicit PowerPoint line-break behavior. ``word_wrap=True``
+    # alone permits some Office/LibreOffice combinations to break Latin words
+    # character-by-character in narrow diamonds and lane labels.
+    p_properties = p._p.get_or_add_pPr()
+    p_properties.set("latinLnBrk", "0")
+    p_properties.set("eaLnBrk", "0")
     run = p.add_run(); run.text = text; run.font.name = typography.get("font_family", theme.font); run.font.size = Pt(fitted_size)
     run.font.bold = typography.get("font_weight", "bold" if bold else "regular") == "bold"
     run.font.color.rgb = _rgb(color or theme.text)
@@ -2647,9 +2813,17 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
     exception_split_groups: list[str] = []
     overview_enabled = bool(include_overview and layout == "process_map" and workflow.get("phases"))
     indexed_edges = [dict(edge, _render_index=index) for index, edge in enumerate(normal_edges)]
+    process_map_density = style.get("_composition_density", rendering_mode)
+    # Very large operational graphs retain the proven stable ordering unless
+    # a recovery candidate explicitly selects another composition. Main-path
+    # diagnostics still apply, but avoiding a speculative reorder prevents an
+    # otherwise valid 60+ node map from consuming the entire routing budget.
+    process_map_order = style.get(
+        "_composition_order", "legacy" if len(workflow["nodes"]) > 56 else "main_path")
     if layout == "process_map":
         map_workflow = dict(workflow); map_workflow["edges"] = indexed_edges
-        process_map_pagination = paginate_process_map(map_workflow, rendering_mode)
+        process_map_pagination = paginate_process_map(
+            map_workflow, process_map_density, process_map_order)
         map_pages = process_map_pagination.pages
         map_page_of = {node_id: page for page, values in enumerate(map_pages) for node_id in values}
         main_pages = len(map_pages)
@@ -2789,7 +2963,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
         _add_title(slide, slide_title, subtitle, theme, style)
         if layout == "process_map":
             page_workflow = process_map_page_view(map_workflow, set(map_pages[page]))
-            page_result = _render_process_map_page(slide, page_workflow, indexed_edges, theme, rendering_mode,
+            page_result = _render_process_map_page(slide, page_workflow, indexed_edges, theme,
+                                                   process_map_density,
                                                    page, map_page_of, main_pages, style,
                                                    1 if overview_enabled else 0)
             layout_warnings.extend(page_result.get("warnings", []))
@@ -2840,7 +3015,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
                        "Errors, recovery actions, retries, escalation, and outcomes", theme, style)
             if layout == "process_map":
                 page_result = _render_process_map_page(slide, exception_workflow,
-                                                       exception_workflow["edges"], theme, rendering_mode,
+                                                       exception_workflow["edges"], theme,
+                                                       process_map_density,
                                                        style=style)
                 layout_warnings.extend(page_result.get("warnings", []))
             else:
@@ -2982,6 +3158,10 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
                                                          for node_id in page_ids))
     cross_slide_edges = (process_map_pagination.split_edges if process_map_pagination else
                          layout_result.split_edges)
+    final_node_pages = (dict(map_page_of) if layout == "process_map" else
+                        {node_id: placement.page for node_id, placement in layout_result.placements.items()})
+    final_main_path = analyze_main_path(workflow)
+    main_path_metrics = _main_path_page_metrics(workflow, final_node_pages, final_main_path)
     return {"slides": len(prs.slides), "diagram_slides": main_pages,
             "exception_slide": include_exceptions in {"separate", "exception_flowchart"} and bool(special_edges),
             "exception_mode": include_exceptions, "continuation_style": continuation_style,
@@ -3013,11 +3193,13 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
                 "cross_slide_relationships": cross_slide_edges,
                 "visible_continuation_labels": continuation_count,
                 "candidate_scores": list(layout_result.candidate_scores) if layout != "process_map" else [],
+                **main_path_metrics,
             },
             "terminal_connectivity": terminal_connectivity,
             "composition_plan": {
                 "strategy": composition_plan.strategy,
-                "graph_analysis": layout_result.graph_analysis if layout != "process_map" else None,
+                "graph_analysis": (layout_result.graph_analysis if layout != "process_map" else
+                                   {"main_path": final_main_path}),
                 "pages": [{"slide_number": page.slide_number, "node_ids": list(page.node_ids),
                            "local_edge_ids": list(page.local_edge_ids),
                            "incoming_cross_edge_ids": list(page.incoming_cross_edge_ids),
@@ -3044,7 +3226,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
             "overview_included": overview_enabled,
             "overview_node_mappings": overview_mappings,
             "applied_theme": theme.name.replace("minimal_process_map", "minimal"),
-            "applied_style": style,
+            "applied_style": {key: value for key, value in style.items()
+                              if not key.startswith("_composition_")},
             "native_shape_count": sum(len(s.shapes) for s in prs.slides)}
 
 
@@ -3053,7 +3236,8 @@ def _render_process_map_page(slide, workflow, edges, theme, rendering_mode,
                              slide_number_offset=0):
     """Render geometry produced by the independent two-dimensional process-map planner."""
     style = style or {}
-    plan = plan_process_map(workflow, rendering_mode, style.get("spacing", "standard"))
+    plan = plan_process_map(workflow, rendering_mode, style.get("spacing", "standard"),
+                            style.get("_composition_order", "main_path"))
     nodes = {node["id"]: node for node in workflow["nodes"]}
     for index, area in enumerate(plan.areas):
         background = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.25), Inches(area.y),
@@ -3319,7 +3503,24 @@ def _route_process_map_edge(slide, edge, a: Box, b: Box, geometry, theme, branch
                                            source_is_decision, connector_segments,
                                            target_is_decision)
     except ValueError as error:
-        raise ValueError(f"Unable to route edge {edge['from']} -> {edge['to']}: {error}") from error
+        if _ROUTING_STATE.get("legacy_process_map_order"):
+            raise ValueError(
+                f"Unable to route edge {edge['from']} -> {edge['to']}: {error}") from error
+        try:
+            # Use the same bounded endpoint-safe fallback as swimlane
+            # connectors. It still rejects routes through unrelated nodes and
+            # preserves exact diamond boundary attachments; it simply avoids
+            # spending the remainder of the candidate budget on an exhaustive
+            # grid search when a short exterior recovery corridor is valid.
+            points = _compute_route_points(
+                a, b, geometry, branch_index, branch_count, source_is_decision,
+                edge.get("path") == "recovery" or b.x <= a.x,
+                {"bottom": 0, "top": 0}, connector_segments,
+                edge.get("path") == "recovery", target_is_decision)
+            _ROUTING_STATE["fallback_uses"] += 1
+        except ValueError as fallback_error:
+            raise ValueError(
+                f"Unable to route edge {edge['from']} -> {edge['to']}: {fallback_error}") from error
     is_special = edge.get("path") in {"exception", "recovery"}
     style = style or {}
     color, width, line_style, arrowhead = _edge_visual(edge, theme, style, is_special,
@@ -3373,11 +3574,17 @@ def _process_map_route_points(a: Box, b: Box, geometry, branch_index: int, branc
     obstacles = [box for box in geometry.values() if box not in {a, b}]
     endpoint_diamonds = ([a] if source_is_decision else []) + ([b] if target_is_decision else [])
     candidates = []; preferred_candidates = []
+    pair_attempts = 0
+    pair_limit = (_ROUTING_STATE.get("route_pair_limit", 10)
+                  if len(obstacles) >= 20 else 16)
     for source_candidate_index, (source_port, source_escape) in enumerate(source_candidates):
         source_stub = (source_port, source_escape)
         if any(_segment_hits_box(source_stub, obstacle, 0.045) for obstacle in obstacles):
             continue
         for target_port, target_escape in target_candidates:
+            pair_attempts += 1
+            if pair_attempts > pair_limit:
+                break
             target_stub = (target_escape, target_port)
             if any(_segment_hits_box(target_stub, obstacle, 0.045) for obstacle in obstacles):
                 continue
@@ -3411,6 +3618,8 @@ def _process_map_route_points(a: Box, b: Box, geometry, branch_index: int, branc
                 candidates.append(points)
                 if source_is_decision and source_port == source_candidates[0][0]:
                     preferred_candidates.append(points)
+        if pair_attempts > pair_limit:
+            break
     if not candidates:
         raise ValueError("No obstacle-free orthogonal route found between process-map nodes "
                          f"at ({a.cx:.3f}, {a.cy:.3f}) and ({b.cx:.3f}, {b.cy:.3f}).")
@@ -3500,7 +3709,14 @@ def _orthogonal_grid_path(start, end, obstacles, existing_segments, diamond_obst
     while queue:
         expansions += 1
         _ROUTING_STATE["grid_expansions"] += 1
-        if expansions > 5000:
+        if (_ROUTING_STATE["grid_expansions"] -
+                _ROUTING_STATE.get("attempt_grid_start", 0) >
+                _ROUTING_STATE.get("attempt_grid_limit", 80000)):
+            _ROUTING_STATE["grid_budget_exhaustions"] += 1
+            raise ValueError("Composition candidate routing budget exhausted.")
+        max_expansions = (_ROUTING_STATE.get("route_expansion_limit", 2800)
+                          if len(obstacles) >= 20 else 5000)
+        if expansions > max_expansions:
             _ROUTING_STATE["grid_budget_exhaustions"] += 1
             return None
         if expansions % 128 == 0:
@@ -5304,6 +5520,17 @@ def _renderer_generate_workflow(workflow: dict[str, Any] | str | Path, output_pa
                 variant_strategy, candidate_style = style_variants[variant_index]
                 variant_index += 1
                 try:
+                    legacy_order = candidate_style.get(
+                        "_composition_order",
+                        "legacy" if (layout == "process_map" and
+                                     len(presentation_workflow["nodes"]) > 56) else "main_path",
+                    ) == "legacy"
+                    stable_router = legacy_order or layout != "process_map"
+                    _ROUTING_STATE["attempt_grid_start"] = _ROUTING_STATE["grid_expansions"]
+                    _ROUTING_STATE["attempt_grid_limit"] = 450000 if stable_router else 35000
+                    _ROUTING_STATE["route_pair_limit"] = 16 if stable_router else 10
+                    _ROUTING_STATE["route_expansion_limit"] = 5000 if stable_router else 2800
+                    _ROUTING_STATE["legacy_process_map_order"] = legacy_order
                     candidate_details = render_presentation(
                         presentation_workflow, candidate, str(destination), theme_obj, layout,
                         exception_mode, continuation_style, effective_density,
@@ -5326,6 +5553,26 @@ def _renderer_generate_workflow(workflow: dict[str, Any] | str | Path, output_pa
                             "Unable to route edge", "No obstacle-free orthogonal route found",
                             "Critical geometry validation failed",
                         )))
+                    if process_map_route_failure:
+                        default_order = ("legacy" if len(presentation_workflow["nodes"]) > 56
+                                         else "main_path")
+                        if (candidate_style.get("_composition_order", default_order) != "legacy" and
+                                not any(item.get("_composition_order") == "legacy"
+                                        for _, item in style_variants)):
+                            legacy_style = deepcopy(candidate_style)
+                            legacy_style["_composition_order"] = "legacy"
+                            style_variants.append(
+                                (f"{strategy}_process_map_legacy_order", legacy_style))
+                        current_density = candidate_style.get("_composition_density", effective_density)
+                        next_density = {"compact": "balanced", "balanced": "detailed"}.get(
+                            current_density)
+                        if (next_density and not any(
+                                item.get("_composition_density") == next_density
+                                for _, item in style_variants)):
+                            density_style = deepcopy(candidate_style)
+                            density_style["_composition_density"] = next_density
+                            style_variants.append(
+                                (f"{strategy}_process_map_{next_density}", density_style))
                     if (process_map_route_failure and
                             not variant_strategy.endswith("process_map_compact_spacing") and
                             not any(name.endswith("process_map_compact_spacing")
