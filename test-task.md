@@ -13,3 +13,11 @@ Include business rejection, missing information, technical failures, retries, pe
 Please create a detailed business workflow rather than a full technical specification.
 
 Please design a simple employee leave request workflow. The employee submits a request, the manager approves it, rejects it or requests corrections. If corrections are required, the employee updates and resubmits the request. The employee receives a notification of the final decision. Create a professional, editable PowerPoint on one slide. The requirements are complete, so no further clarification is needed.
+
+## Digital credit card workflow test
+
+Hi! Can you help me design a digital credit card application workflow for a bank? It should support existing individual and corporate customers, account-linked and standalone cards, customer verification, automated credit assessment and manual review. I would like an editable PowerPoint that I can use for a client workshop.
+
+## Conversational refinement test
+
+Thanks! Could you expand the corporate customer verification and signing authority part in more detail while keeping the rest of the workflow at the current level?
