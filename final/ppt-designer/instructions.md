@@ -75,6 +75,7 @@ After successful generation:
 - Retain the validated workflow JSON and presentation configuration internally so later conversational refinements build on the current presentation.
 - Preserve any structured workflow or rendering information required for agent-to-agent communication without exposing it in the ordinary user-facing response.
 - Do not repeat the same file under another heading such as “Files uploaded by the tool.” ChatPwC may automatically append its own attachment or download link; do not attempt to suppress platform-generated links through unsupported mechanisms. The one-link requirement applies to the response you author.
+- Keep workflow JSON, presentation configuration, traceability, and rendering diagnostics in memory or temporary working storage where the platform permits. Do not write or publish those intermediate artifacts by default. Request `write_traceability=False` so a normal ChatPwC render writes only the requested PPTX.
 
 For presentation-only refinements, regenerate the presentation from the retained workflow and configuration, then provide the single prominent direct Markdown download link to the updated PPTX. Briefly identify the requested change. Do not repeat the underlying workflow JSON or technical artifacts unless requested.
 
@@ -94,6 +95,8 @@ Never simplify the workflow, omit relationships, or change business logic automa
 ## Presentation design
 
 Use the bundled `workflow_ppt_builder.py` through the controlled rendering action. Do not generate arbitrary PowerPoint drawing code.
+
+Use builder defaults wherever possible. Unless the user requests otherwise, do not add custom colors, element overrides, a fixed density, preferred slide count, overview slide, assumptions appendix, or open-questions appendix. Use adaptive layout selection, `include_exceptions="none"`, `include_assumptions=False`, `include_open_questions=False`, `include_overview=False`, and `write_traceability=False`. Keep important exceptions in the workflow only when they are part of the requested business view; do not impose layout restrictions or remove relationships to force a slide count.
 
 ### Approved visual baseline — frozen
 
@@ -220,10 +223,11 @@ result = generate_workflow(
     density="compact",
     include_overview=False,
     style=None,
+    write_traceability=False,
 )
 ```
 
-The supported values and style properties are exactly those listed above. The function validates the workflow and style, constructs and validates a slide composition plan, creates native editable PowerPoint shapes and connectors, and returns a structured result containing `status`, `output_path`, `details`, and `warnings`. Successful results include `details.applied_theme`, `details.applied_style`, `details.element_style_verification`, `details.text_layout_validation`, `details.semantic_validation`, `details.composition_plan`, and `details.traceability_path`. Text validation uses conservative whole-word and safe-region estimates, including a reduced central region for diamonds; rendered preview review remains necessary because PowerPoint font substitution cannot be measured perfectly in every runtime. The traceability JSON maps each displayed node and edge to the source graph and records cross-slide relationships. It does not install packages, call external services, or change workflow business logic.
+The supported values and style properties are exactly those listed above. The function validates the workflow and style, constructs and validates a slide composition plan, creates native editable PowerPoint shapes and connectors, and returns a structured result containing `status`, `output_path`, `details`, and `warnings`. Successful results include `details.applied_theme`, `details.applied_style`, `details.element_style_verification`, `details.text_layout_validation`, `details.semantic_validation`, `details.composition_plan`, and `details.traceability_path`. Text validation uses conservative whole-word and safe-region estimates, including a reduced central region for diamonds; rendered preview review remains necessary because PowerPoint font substitution cannot be measured perfectly in every runtime. Traceability is always constructed and validated internally. When `write_traceability=True`, a traceability JSON is written next to the PPTX and its path is returned; when `False`, `details.traceability_path` is `null` and no supporting JSON file is written. The builder does not install packages, call external services, or change workflow business logic.
 
 ## Error behavior
 

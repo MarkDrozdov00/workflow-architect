@@ -1785,6 +1785,43 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
                 group_rows[(area_id, str(group))] = row
         assigned_rows[node_id] = row
 
+    bounds = {"compact": (1.12, 13.00), "standard": (1.25, 12.92), "spacious": (1.42, 12.75)}
+    left, right = bounds[spacing]
+    size_scale = {"compact": 0.92, "standard": 1.0, "spacious": 1.08}[spacing]
+    usable_width = right - left
+    minimum_gap = 0.16
+    # Cycles and convergence can assign many nodes to the same logical rank.
+    # Rebalance only rows whose actual rendered widths exceed the usable
+    # process-map width. This replaces an implicit equal-center squeeze with
+    # deterministic additional rows while preserving area membership and
+    # graph order.
+    for area in areas:
+        area_members = [node_id for node_id in nodes if membership[node_id] == area["id"]]
+        next_row = 0
+        for original_row in sorted({assigned_rows[node_id] for node_id in area_members}):
+            members = sorted(
+                (node_id for node_id in area_members if assigned_rows[node_id] == original_row),
+                key=lambda value: (rank[value], value),
+            )
+            current: list[str] = []
+            current_width = 0.0
+            for node_id in members:
+                node_width = process_map_node_size(nodes[node_id], density)[0] * size_scale
+                proposed = node_width if not current else current_width + minimum_gap + node_width
+                if current and proposed > usable_width:
+                    for member in current:
+                        assigned_rows[member] = next_row
+                    next_row += 1
+                    current = [node_id]
+                    current_width = node_width
+                else:
+                    current.append(node_id)
+                    current_width = proposed
+            if current:
+                for member in current:
+                    assigned_rows[member] = next_row
+                next_row += 1
+
     area_rows = {area["id"]: max((assigned_rows[nid] for nid in nodes if membership[nid] == area["id"]), default=0) + 1
                  for area in areas}
     weights = [max(1.0, area_rows[area["id"]] * 0.92) for area in areas]
@@ -1796,9 +1833,6 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
         cursor += height
 
     node_plans: dict[str, ProcessMapNode] = {}
-    bounds = {"compact": (1.12, 13.00), "standard": (1.25, 12.92), "spacious": (1.42, 12.75)}
-    left, right = bounds[spacing]
-    size_scale = {"compact": 0.92, "standard": 1.0, "spacious": 1.08}[spacing]
     for area in planned_areas:
         row_count = area_rows[area.id]
         row_height = area.h / row_count
@@ -1807,13 +1841,22 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
             members.sort(key=lambda value: (rank[value], value))
             if not members:
                 continue
-            gap = (right - left) / max(1, len(members))
+            sizes = []
+            for node_id in members:
+                w, h = process_map_node_size(nodes[node_id], density)
+                sizes.append((w * size_scale, h * size_scale))
+            total_node_width = sum(width for width, _ in sizes)
+            gap = ((right - left - total_node_width) / max(1, len(members) - 1)
+                   if len(members) > 1 else 0.0)
+            gap = max(minimum_gap, gap)
+            used_width = total_node_width + gap * max(0, len(members) - 1)
+            cursor_x = left + max(0.0, (right - left - used_width) / 2)
             for index, node_id in enumerate(members):
-                node = nodes[node_id]; w, h = process_map_node_size(node, density)
-                w *= size_scale; h *= size_scale
-                x = left + (index + 0.5) * gap - w / 2
+                node = nodes[node_id]; w, h = sizes[index]
+                x = cursor_x
                 y = area.y + row * row_height + (row_height - h) / 2
                 node_plans[node_id] = ProcessMapNode(node_id, area.id, row, index, x, y, w, h)
+                cursor_x += w + gap
 
     used = sum(plan.w * plan.h for plan in node_plans.values())
     usable = (right - left) * (bottom - top)
@@ -1825,7 +1868,16 @@ def plan_process_map(workflow: dict[str, Any], density: str = "compact",
 def process_map_node_size(node: dict[str, Any], density: str) -> tuple[float, float]:
     length = len(node.get("label", "")) + len(node.get("description", ""))
     if node.get("type") == "decision":
-        return min(1.42, max(1.00, 0.88 + length * 0.016)), min(1.00, max(0.90, 0.78 + length * 0.008))
+        label = str(node.get("label", ""))
+        longest = max((len(word) for word in label.split()), default=1)
+        # The usable center of a diamond is materially narrower than its
+        # rectangular envelope. Size for the longest whole word as well as
+        # total label length so the 8 pt minimum never requires character
+        # fragmentation inside the conservative safe region.
+        width = min(1.90, max(1.10, 0.88 + len(label) * 0.016,
+                              0.52 + longest * 0.09))
+        height = min(1.08, max(0.92, 0.78 + len(label) * 0.008))
+        return width, height
     if node.get("type") in {"start", "end", "error"}:
         # Terminal ellipses lose substantially more usable text area than a
         # rectangle. Size from the visible label and its longest whole word,
@@ -2149,13 +2201,16 @@ def _pptx_connector_endpoints(shape) -> tuple[tuple[float, float], tuple[float, 
 
 def _verify_pptx_diamond_attachments(pptx_path: str | Path, nodes: dict[str, dict[str, Any]],
                                      indexed_edges: list[dict[str, Any]],
-                                     slide_limit: int | None = None) -> dict[str, Any]:
+                                     slide_limit: int | None = None,
+                                     slide_offset: int = 0) -> dict[str, Any]:
     """Reopen the artifact and verify native connector geometry at every local diamond."""
     reopened = Presentation(str(pptx_path)); records = []; errors = []
     edge_by_index = {int(edge.get("_render_index", index)): edge
                      for index, edge in enumerate(indexed_edges)}
-    slides = list(reopened.slides)[:slide_limit] if slide_limit is not None else list(reopened.slides)
-    for slide_number, slide in enumerate(slides, start=1):
+    all_slides = list(reopened.slides)
+    slides = (all_slides[slide_offset:slide_offset + slide_limit]
+              if slide_limit is not None else all_slides[slide_offset:])
+    for slide_number, slide in enumerate(slides, start=1 + slide_offset):
         node_shapes = {shape.name.removeprefix("workflow-node::"): shape for shape in slide.shapes
                        if shape.name.startswith("workflow-node::")}
         grouped = defaultdict(list)
@@ -2224,7 +2279,8 @@ def _verify_pptx_diamond_attachments(pptx_path: str | Path, nodes: dict[str, dic
 
 def _verify_pptx_cross_slide_continuations(pptx_path: str | Path,
                                            plan: SlideCompositionPlan,
-                                           nodes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+                                           nodes: dict[str, dict[str, Any]],
+                                           slide_offset: int = 0) -> dict[str, Any]:
     """Verify visible, connected, business-readable cross-slide references."""
     reopened = Presentation(str(pptx_path)); records = []; errors = []
     indexed_slides = []
@@ -2246,14 +2302,16 @@ def _verify_pptx_cross_slide_continuations(pptx_path: str | Path,
             continue
         edge_id = int(record["edge_id"]); source_slide = int(record["source_page"]) + 1
         target_slide = int(record["target_page"]) + 1
-        _, source_shapes, source_node_boxes, source_protected_boxes = indexed_slides[source_slide - 1]
+        _, source_shapes, source_node_boxes, source_protected_boxes = indexed_slides[
+            source_slide - 1 + slide_offset]
         outgoing = source_shapes.get(f"workflow-continuation::{edge_id}::outgoing")
         links = [shape for name, shape in source_shapes.items()
                  if name.startswith(f"workflow-continuation-link::{edge_id}::outgoing::")]
         destination_label = str(nodes[record["target"]].get("label", "")).rstrip("?")
         branch_label = str(record.get("label", "")).strip()
         text = outgoing.text.strip() if outgoing is not None and hasattr(outgoing, "text") else ""
-        slide_reference_matches = bool(outgoing and f"slide {target_slide}" in text)
+        slide_reference_matches = bool(
+            outgoing and f"slide {target_slide + slide_offset}" in text)
         branch_reference_matches = bool(not branch_label or branch_label in text)
         # Detailed references name the destination. Compact/minimal references
         # deliberately use only the branch meaning and matching slide number;
@@ -2268,7 +2326,8 @@ def _verify_pptx_cross_slide_continuations(pptx_path: str | Path,
                                       for box in source_node_boxes)
             no_protected_overlap = not any(_boxes_overlap(marker_box, box, 0.01)
                                            for box in source_protected_boxes)
-        _, target_shapes, _, target_protected_boxes = indexed_slides[target_slide - 1]
+        _, target_shapes, _, target_protected_boxes = indexed_slides[
+            target_slide - 1 + slide_offset]
         incoming = target_shapes.get(f"workflow-continuation::{edge_id}::incoming")
         incoming_protected_overlap = False
         if incoming is not None:
@@ -2281,8 +2340,10 @@ def _verify_pptx_cross_slide_continuations(pptx_path: str | Path,
                            no_protected_overlap and not incoming_protected_overlap)
         item = {
             "edge_id": edge_id, "source_node": record["source"],
-            "destination_node": record["target"], "source_slide": source_slide,
-            "destination_slide": target_slide, "branch_label": branch_label,
+            "destination_node": record["target"],
+            "source_slide": source_slide + slide_offset,
+            "destination_slide": target_slide + slide_offset,
+            "branch_label": branch_label,
             "outgoing_indicator_shape_ids": [outgoing.shape_id] if outgoing else [],
             "outgoing_link_shape_ids": [shape.shape_id for shape in links],
             "incoming_indicator_shape_ids": [incoming.shape_id] if incoming else [],
@@ -2534,7 +2595,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
                         theme: Theme, layout: str, include_exceptions: str,
                         continuation_style: str = "minimal", rendering_mode: str = "compact",
                         include_assumptions: bool = False, include_open_questions: bool = False,
-                        include_overview: bool = False, style: dict[str, Any] | None = None) -> dict[str, Any]:
+                        include_overview: bool = False, style: dict[str, Any] | None = None,
+                        write_traceability: bool = True) -> dict[str, Any]:
     style = style or {}
     if include_exceptions not in {"separate", "inline", "omit", "exception_flowchart"}:
         raise ValueError("include_exceptions must be 'separate', 'inline', 'omit', or 'exception_flowchart'")
@@ -2583,6 +2645,7 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
     process_map_unused_space = None; process_map_pagination = None
     rendered_node_ids: list[str] = []; covered_edge_indices: set[int] = set()
     exception_split_groups: list[str] = []
+    overview_enabled = bool(include_overview and layout == "process_map" and workflow.get("phases"))
     indexed_edges = [dict(edge, _render_index=index) for index, edge in enumerate(normal_edges)]
     if layout == "process_map":
         map_workflow = dict(workflow); map_workflow["edges"] = indexed_edges
@@ -2591,7 +2654,7 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
         map_page_of = {node_id: page for page, values in enumerate(map_pages) for node_id in values}
         main_pages = len(map_pages)
         layout_warnings.extend(process_map_pagination.warnings)
-        if include_overview:
+        if overview_enabled:
             slide = prs.slides.add_slide(blank)
             _add_slide_background(slide, theme)
             overview_mappings = _render_process_map_overview(slide, workflow, theme, style)
@@ -2727,7 +2790,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
         if layout == "process_map":
             page_workflow = process_map_page_view(map_workflow, set(map_pages[page]))
             page_result = _render_process_map_page(slide, page_workflow, indexed_edges, theme, rendering_mode,
-                                                   page, map_page_of, main_pages, style)
+                                                   page, map_page_of, main_pages, style,
+                                                   1 if overview_enabled else 0)
             layout_warnings.extend(page_result.get("warnings", []))
             unused_values.append(page_result.get("unused_space", 0.0))
             rendered_node_ids.extend(page_result.get("rendered_node_ids", []))
@@ -2828,7 +2892,7 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
         geometry_status = "clean_with_warnings"
     prs.save(output_path)
     pptx_diamond_verification = _verify_pptx_diamond_attachments(
-        output_path, nodes, indexed_edges, main_pages)
+        output_path, nodes, indexed_edges, main_pages, 1 if overview_enabled else 0)
     if pptx_diamond_verification["status"] != "verified":
         Path(output_path).unlink(missing_ok=True)
         raise ValueError(
@@ -2836,7 +2900,7 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
             f"failed_edges={pptx_diamond_verification['failed_edges']}."
         )
     cross_slide_verification = _verify_pptx_cross_slide_continuations(
-        output_path, composition_plan, nodes)
+        output_path, composition_plan, nodes, 1 if overview_enabled else 0)
     if cross_slide_verification["status"] != "verified":
         Path(output_path).unlink(missing_ok=True)
         raise ValueError(
@@ -2899,9 +2963,11 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
         ],
         "semantic_validation": semantic_validation,
     }
-    traceability_path = str(Path(output_path).with_suffix(".traceability.json"))
-    Path(traceability_path).write_text(json.dumps(traceability, indent=2, ensure_ascii=False) + "\n",
-                                       encoding="utf-8")
+    traceability_path = None
+    if write_traceability:
+        traceability_path = str(Path(output_path).with_suffix(".traceability.json"))
+        Path(traceability_path).write_text(
+            json.dumps(traceability, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     quality["slides_generated"] = len(prs.slides)
     page_node_counts = []
     page_terminal_only = []
@@ -2964,7 +3030,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
                 "slide_relationships": list(composition_plan.slide_relationships),
             },
             "semantic_validation": semantic_validation,
-            "traceability_path": str(Path(traceability_path).resolve()),
+            "traceability_path": (str(Path(traceability_path).resolve())
+                                  if traceability_path else None),
             "traceability_statistics": {"nodes": len(traceability["nodes"]),
                                          "edges": len(traceability["edges"]),
                                          "decisions": len(traceability["decisions"]),
@@ -2974,7 +3041,7 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
                               "duplicates": duplicate_nodes if layout == "process_map" else []},
             "edge_coverage": {"expected": len(indexed_edges), "represented": len(covered_edge_indices),
                               "missing_indices": missing_edges if layout == "process_map" else []},
-            "overview_included": bool(include_overview and layout == "process_map"),
+            "overview_included": overview_enabled,
             "overview_node_mappings": overview_mappings,
             "applied_theme": theme.name.replace("minimal_process_map", "minimal"),
             "applied_style": style,
@@ -2982,7 +3049,8 @@ def render_presentation(workflow: dict[str, Any], layout_result: LayoutResult, o
 
 
 def _render_process_map_page(slide, workflow, edges, theme, rendering_mode,
-                             page_index=0, page_of=None, total_pages=1, style=None):
+                             page_index=0, page_of=None, total_pages=1, style=None,
+                             slide_number_offset=0):
     """Render geometry produced by the independent two-dimensional process-map planner."""
     style = style or {}
     plan = plan_process_map(workflow, rendering_mode, style.get("spacing", "standard"))
@@ -3040,6 +3108,25 @@ def _render_process_map_page(slide, workflow, edges, theme, rendering_mode,
     for source in outgoing:
         outgoing[source].sort(key=lambda edge: (geometry[edge["to"]].cy if edge["to"] in geometry else 99.0,
                                                 edge.get("label", ""), edge["to"]))
+    # Route a decision's branches in the same geometric order used to assign
+    # its ports. Source JSON order can otherwise draw a lower branch before a
+    # middle branch and consume the latter's only clear corridor.
+    ordered_local_edges = []
+    consumed_edges = set()
+    for edge in local_edges:
+        identity = id(edge)
+        if identity in consumed_edges:
+            continue
+        siblings = [candidate for candidate in local_edges
+                    if candidate["from"] == edge["from"]]
+        if nodes[edge["from"]].get("type") == "decision":
+            siblings.sort(key=lambda candidate: outgoing[candidate["from"]].index(candidate))
+        for sibling in siblings:
+            sibling_identity = id(sibling)
+            if sibling_identity not in consumed_edges:
+                ordered_local_edges.append(sibling)
+                consumed_edges.add(sibling_identity)
+    local_edges = ordered_local_edges
     connector_segments = []; pending_labels = []
     for edge in local_edges:
         pending = _route_process_map_edge(
@@ -3059,7 +3146,7 @@ def _render_process_map_page(slide, workflow, edges, theme, rendering_mode,
         label_records.append((box, source, target, points))
     continuation_count, continuation_edges, continuation_records = _render_process_map_continuations(
         slide, page_index, total_pages, edges, page_of or {}, geometry, label_boxes,
-        connector_segments, theme, nodes,
+        connector_segments, theme, nodes, slide_number_offset,
     )
     label_records.extend(continuation_records)
     quality_nodes = {node_id: dict(node, description="") for node_id, node in nodes.items()}
@@ -3074,7 +3161,8 @@ def _render_process_map_page(slide, workflow, edges, theme, rendering_mode,
 
 
 def _render_process_map_continuations(slide, page, total_pages, edges, page_of, geometry,
-                                      label_boxes, connector_segments, theme, nodes):
+                                      label_boxes, connector_segments, theme, nodes,
+                                      slide_number_offset=0):
     if total_pages <= 1 or not page_of:
         return 0, set(), []
     covered = set(); count = 0; records = []
@@ -3082,25 +3170,34 @@ def _render_process_map_continuations(slide, page, total_pages, edges, page_of, 
                    page_of[edge["from"]] != page_of[edge["to"]] and
                    (page_of[edge["from"]] == page or page_of[edge["to"]] == page)]
     cross_edges.sort(key=lambda edge: edge.get("_render_index", 0))
-    # Cross-slide relationships stay traceable through their source edge
-    # indices and stage titles.  Ordinary process maps do not expose internal
-    # continuation prose or graph references on the canvas.
-    if cross_edges:
-        return 0, {edge.get("_render_index", 0) for edge in cross_edges}, []
+    # Cross-slide relationships must be represented in the saved PowerPoint,
+    # not merely counted as covered in diagnostics. The former early return
+    # skipped the existing renderer below and caused the post-write semantic
+    # verifier to reject every process-map handoff as unrepresented.
     for edge in cross_edges:
         outgoing = page_of[edge["from"]] == page
+        is_backward = page_of[edge["to"]] < page_of[edge["from"]]
+        if not outgoing and not is_backward:
+            # A connected source-side reference is sufficient for normal
+            # forward continuity. Reserve paired destination references for
+            # backward relationships, where the earlier slide otherwise
+            # cannot make the return direction understandable.
+            covered.add(edge.get("_render_index", 0))
+            continue
         node_id = edge["from"] if outgoing else edge["to"]
         anchor = geometry.get(node_id)
         if anchor is None:
             continue
         index = edge.get("_render_index", 0)
-        other = page_of[edge["to"]] + 1 if outgoing else page_of[edge["from"]] + 1
+        other = ((page_of[edge["to"]] if outgoing else page_of[edge["from"]]) +
+                 1 + slide_number_offset)
         direction = "To" if outgoing else "From"
         semantic = str(edge.get("label", "")).strip()
         source_label = str(nodes.get(edge["from"], {}).get("label", "previous process step")).rstrip("?")
         target_label = str(nodes.get(edge["to"], {}).get("label", "next process step")).rstrip("?")
-        text = (f"{direction} {target_label if outgoing else source_label} · slide {other}" +
-                (f" · {semantic}" if semantic else ""))
+        context_label = target_label if outgoing else source_label
+        text = (f"{direction} slide {other} · {semantic}" if semantic else
+                f"{direction} {context_label} · slide {other}")
         width = min(2.35, max(1.05, 0.24 + len(text) * 0.055)); height = 0.22
         candidates = _continuation_candidates(anchor, width, height, outgoing, count)
         # Dense phase boundaries can create several continuations around one
@@ -3111,19 +3208,75 @@ def _render_process_map_continuations(slide, page, total_pages, edges, page_of, 
                 candidates.append(Box(0.92 + slot * 2.42, row_y, width, height))
         candidates = [_clamp_continuation_box(box) for box in candidates]
         blockers = list(geometry.values()) + label_boxes
-        chosen = next((box for box in candidates if _inside_slide(box) and
-                       not any(_boxes_overlap(box, other_box, 0.025) for other_box in blockers) and
-                       not any(_segment_hits_box(segment, box, 0.02) for segment in connector_segments)), None)
-        if chosen is None:
-            valid = [box for box in candidates if _inside_slide(box)]
-            if not valid:
-                raise ValueError(f"No readable continuation-label position for edge {index} on Part {page + 1}.")
-            chosen = min(valid, key=lambda box: sum(_boxes_overlap(box, other_box, 0.0)
-                                                    for other_box in blockers))
+        valid_options = []
+        routing_geometry = dict(geometry)
+        routing_geometry.update({f"__continuation_label_{label_index}": box
+                                 for label_index, box in enumerate(label_boxes)})
+        for candidate in candidates:
+            if (not _inside_slide(candidate) or
+                    any(_boxes_overlap(candidate, other_box, 0.025) for other_box in blockers) or
+                    any(_segment_hits_box(segment, candidate, 0.02)
+                        for segment in connector_segments)):
+                continue
+            try:
+                if outgoing:
+                    route = _process_map_route_points(
+                        anchor, candidate, routing_geometry, 0, 1,
+                        nodes.get(node_id, {}).get("type") == "decision",
+                        connector_segments, False)
+                else:
+                    route = _process_map_route_points(
+                        candidate, anchor, routing_geometry, 0, 1, False,
+                        connector_segments,
+                        nodes.get(node_id, {}).get("type") == "decision")
+            except ValueError:
+                # The grid router is intentionally conservative. Reuse the
+                # endpoint-safe bounded fallback used by ordinary connectors;
+                # it still rejects every route through an unrelated shape.
+                try:
+                    route = _compute_route_points(
+                        anchor if outgoing else candidate,
+                        candidate if outgoing else anchor,
+                        routing_geometry, 0, 1,
+                        nodes.get(node_id, {}).get("type") == "decision" if outgoing else False,
+                        False, {"bottom": 0, "top": 0}, connector_segments,
+                        edge.get("path") == "recovery",
+                        nodes.get(node_id, {}).get("type") == "decision" if not outgoing else False,
+                    )
+                except ValueError:
+                    continue
+            valid_options.append((candidate, route,
+                                  _continuation_route_metrics(route, connector_segments)))
+            if len(valid_options) >= 4:
+                break
+        if not valid_options:
+            raise ValueError(
+                f"No collision-free continuation position for edge {index} on Part {page + 1}.")
+        chosen, points, _ = min(
+            valid_options,
+            key=lambda option: (option[2][0], option[2][1], option[2][2], option[2][3]))
         tag = slide.shapes.add_textbox(Inches(chosen.x), Inches(chosen.y), Inches(chosen.w), Inches(chosen.h))
+        role = "outgoing" if outgoing else "incoming"
+        tag.name = f"workflow-continuation::{index}::{role}"
         tag.fill.background(); tag.line.fill.background(); _set_text(tag, text, theme, 7, False, theme.muted)
         tag.text_frame.margin_left = tag.text_frame.margin_right = Inches(0.01)
         tag.text_frame.margin_top = tag.text_frame.margin_bottom = 0
+        directed = points
+        edge_color, edge_width, edge_style, _ = _edge_visual(
+            edge, theme, {}, edge.get("path") in {"exception", "recovery"}, 1.0)
+        for segment_index, (p1, p2) in enumerate(zip(directed, directed[1:]), start=1):
+            line = slide.shapes.add_connector(
+                MSO_CONNECTOR.STRAIGHT, Inches(p1[0]), Inches(p1[1]),
+                Inches(p2[0]), Inches(p2[1]))
+            line.name = (f"workflow-continuation-link::{index}::{role}::"
+                         f"segment-{segment_index}")
+            line.line.color.rgb = _rgb(edge_color)
+            line.line.width = Pt(max(0.9, min(1.2, edge_width)))
+            _set_dash(line, edge_style)
+            if segment_index == len(directed) - 1:
+                _set_arrowhead(line)
+            token = f"continuation:{node_id}:{index}:{role}"
+            connector_segments.append((p1, p2, token, token))
         label_boxes.append(chosen); covered.add(index); count += 1
         records.append((chosen, edge["from"], edge["to"]))
     return count, covered, records
@@ -3527,8 +3680,21 @@ def _render_page(slide, nodes, actors, lr, page, theme, layout, edges, exception
         x = centers[p.column] - w / 2; base_y = lane_tops[lane]
         if layout == "flowchart":
             siblings = sorted(value for value in page_nodes if lr.placements[value].column == p.column)
+            sibling_sizes = [render_sizes[value][1] for value in siblings]
+            stack_gap = 0.07
+            stack_height = sum(sibling_sizes) + stack_gap * max(0, len(siblings) - 1)
             position = siblings.index(nid)
-            y = base_y + (position + 1) * lane_h / (len(siblings) + 1) - h / 2
+            if len(nodes) >= 45 and stack_height <= lane_h - 0.12:
+                # Equal center spacing ignores variable node heights. In a
+                # dense column, a tall decision can overlap the next terminal;
+                # the old greedy repair then moved that terminal to the slide
+                # edge and caused a later outcome to collide in every layout
+                # candidate. Stack using the actual rendered heights whenever
+                # the complete column fits.
+                y = (base_y + (lane_h - stack_height) / 2 +
+                     sum(sibling_sizes[:position]) + stack_gap * position)
+            else:
+                y = base_y + (position + 1) * lane_h / (len(siblings) + 1) - h / 2
         else:
             siblings = sorted(value for value in page_nodes
                               if lr.placements[value].column == p.column and
@@ -4778,7 +4944,8 @@ def _render_continuations(slide, page, edges, lr, nodes, geometry, label_boxes,
             return candidate_points
 
         valid_options = []
-        primary_limit = 72 if len(nodes) < 45 else 16
+        primary_limit = 72 if len(nodes) < 45 else 40
+        valid_target = 4
         for candidate_order, candidate in enumerate(candidates[:primary_limit]):
             _ROUTING_STATE["continuation_candidates"] += 1
             _routing_budget_check(
@@ -4787,6 +4954,12 @@ def _render_continuations(slide, page, edges, lr, nodes, geometry, label_boxes,
             if candidate_points:
                 metrics = _continuation_route_metrics(candidate_points, connector_segments)
                 valid_options.append((candidate_order, candidate, candidate_points, metrics))
+                # Candidate order already prioritizes the nearest reserved
+                # continuation channel. On large graphs, evaluating every
+                # alternative after a valid route was found dominated runtime
+                # without changing hard geometry acceptance.
+                if len(valid_options) >= valid_target:
+                    break
         if valid_options:
             first_order, first_candidate, first_points, first_metrics = valid_options[0]
             first_length = first_metrics[2]
@@ -4820,6 +4993,8 @@ def _render_continuations(slide, page, edges, lr, nodes, geometry, label_boxes,
                     fallback_options.append((candidate_order, candidate, candidate_points,
                                              _continuation_route_metrics(candidate_points,
                                                                          connector_segments)))
+                    if len(nodes) >= 45 and len(fallback_options) >= 4:
+                        break
             if fallback_options:
                 _, chosen, points, _ = min(
                     fallback_options,
@@ -4992,7 +5167,8 @@ def _renderer_generate_workflow(workflow: dict[str, Any] | str | Path, output_pa
                       rendering_mode: str | None = None, include_assumptions: bool = False,
                       include_open_questions: bool = False, exception_ids: list[str] | tuple[str, ...] | None = None,
                       density: str = "compact", include_overview: bool = False,
-                      style: dict[str, Any] | None = None) -> dict[str, Any]:
+                      style: dict[str, Any] | None = None,
+                      write_traceability: bool = True) -> dict[str, Any]:
     """Validate, lay out, and render a workflow as editable native PowerPoint shapes."""
     render_started = time.monotonic()
     _ROUTING_STATE.update({
@@ -5051,6 +5227,8 @@ def _renderer_generate_workflow(workflow: dict[str, Any] | str | Path, output_pa
                 "No collision-free continuation position",
                 "No readable continuation-label position",
                 "No endpoint-safe orthogonal route found",
+                "Unable to route edge",
+                "No obstacle-free orthogonal route found",
                 "Critical geometry validation failed",
                 "Critical terminal connectivity failure",
                 "PowerPoint cross-slide semantic verification failed",
@@ -5129,7 +5307,8 @@ def _renderer_generate_workflow(workflow: dict[str, Any] | str | Path, output_pa
                     candidate_details = render_presentation(
                         presentation_workflow, candidate, str(destination), theme_obj, layout,
                         exception_mode, continuation_style, effective_density,
-                        include_assumptions, include_open_questions, include_overview, candidate_style)
+                        include_assumptions, include_open_questions, include_overview,
+                        candidate_style, write_traceability)
                 except ValueError as error:
                     last_error = error
                     recovery_attempts.append({
@@ -5142,6 +5321,27 @@ def _renderer_generate_workflow(workflow: dict[str, Any] | str | Path, output_pa
                     })
                     if not recoverable_layout_failure(error):
                         raise
+                    process_map_route_failure = (layout == "process_map" and any(
+                        token in str(error) for token in (
+                            "Unable to route edge", "No obstacle-free orthogonal route found",
+                            "Critical geometry validation failed",
+                        )))
+                    if (process_map_route_failure and
+                            not variant_strategy.endswith("process_map_compact_spacing") and
+                            not any(name.endswith("process_map_compact_spacing")
+                                    for name, _ in style_variants)):
+                        # Process-map geometry is planned inside the renderer,
+                        # so LayoutResult pagination candidates do not change
+                        # its node positions. Give it one deterministic,
+                        # bounded spacing alternative before reporting failure.
+                        alternate_style = deepcopy(candidate_style)
+                        alternate_style["spacing"] = "compact"
+                        alternate_style.setdefault("layout_preferences", {})[
+                            "activity_spacing"] = "compact"
+                        alternate_style["layout_preferences"][
+                            "content_margins"] = "compact"
+                        style_variants.append(
+                            (f"{strategy}_process_map_compact_spacing", alternate_style))
                     label_only_failure = ("label_collisions" in str(error) and not any(
                         token in str(error) for token in (
                             "node_overlaps=", "connector_node_intersections=",
@@ -5365,6 +5565,7 @@ def generate_workflow(
     density: str = "compact",
     include_overview: bool = False,
     style: dict[str, Any] | None = None,
+    write_traceability: bool = True,
 ) -> dict[str, Any]:
     """Validate and render a workflow as an editable PowerPoint presentation."""
     if layout not in SUPPORTED_LAYOUTS:
@@ -5381,6 +5582,7 @@ def generate_workflow(
         include_exceptions=include_exceptions, continuation_style=continuation_style,
         include_assumptions=include_assumptions, include_open_questions=include_open_questions,
         exception_ids=exception_ids, density=density, include_overview=include_overview, style=style,
+        write_traceability=write_traceability,
     )
     if result.get("status") == "success" and not Path(result["output_path"]).is_file():
         return _deployment_error("Renderer reported success but no PowerPoint file exists.")
